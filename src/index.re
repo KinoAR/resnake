@@ -5,15 +5,18 @@
 open Reprocessing;
 
 
-let bodySize = 40;
-let foodSize = 20;  
+let width = 1000;
+let height = 1000;
+let gridSize = (100, 100);
+let frameLock = 2;
+let (gridLength, gridWidth) = gridSize;
+let bodySize = width / gridLength;
+let foodSize = (width / gridWidth ) / 2
 let headColor = Utils.color(~r=255, ~g=255, ~b=255, ~a=255);
 let foodColor = Utils.color(~r=255, ~g=255, ~b=0, ~a=255);
 let obstacleColor = Utils.color(~r=0, ~g=255, ~b=0, ~a=255);
 let textColor = Utils.color(~r=255, ~g=255, ~b=255, ~a=255);
-let width = 500;
-let height = 500;
-let gridSize = (10, 10);
+
 let speed = 4;
 
 type scoreT = int;
@@ -46,6 +49,9 @@ type stateT = {
   running: runningT
 };
 
+let clamp = (min, max, num) => {
+  num <= min ? min : num >= max ? max : num;
+}
 
 let getListElement = (index, list) => {
   list |> Array.of_list |> Array.get(_, index);
@@ -54,9 +60,9 @@ let getListElement = (index, list) => {
 let hitBoundary = (x, y, env) => {
   let width = Env.width(env);
   let height = Env.height(env);
-  if (x > width || x < 0) {
+  if (x >= width - bodySize || x <= bodySize) {
     HitSides;
-  } else if (y > height || y < 0) {
+  } else if (y >= height - bodySize || y <= bodySize) {
     HitCeiling;
   } else {
     HitNoBoundary;
@@ -88,10 +94,9 @@ let getGridPositionOffset = (~grid, ~x, ~y, ~offX, ~offY) => {
   |> offsetPosition(~offX=offX, ~offY=offY, ~position=_);
 };
 
-let randomGridPosition = (~gridSize, ~grid) => {
-  let (gridWidth, gridLength) = gridSize;
-  let x = Utils.random(~min=0, ~max=gridWidth);
-  let y = Utils.random(~min=0, ~max=gridLength);
+let randomGridPosition = (~minX, ~minY, ~maxX, ~maxY) => {
+  let x = Utils.random(~min=minX, ~max=maxX);
+  let y = Utils.random(~min=minY, ~max=maxY);
   (x, y);
 }
 
@@ -120,8 +125,17 @@ printGrid(grid);
 
 let setup = env => {
   let position = randomGridPosition(
-      ~gridSize=gridSize,
-      ~grid=grid,
+      ~minX=1,
+      ~minY=1,
+      ~maxY=gridLength - 1,
+      ~maxX=gridWidth - 1
+    );
+
+  let foodPosition = randomGridPosition(
+    ~minX=1,
+    ~minY=1,
+    ~maxY=gridLength - 1,
+    ~maxX=gridWidth - 1
     );
   Env.size(~width, ~height, env);
   {
@@ -131,15 +145,9 @@ let setup = env => {
     level: 1,
     snake: [position],
     snakePrevious: [position],
-    foodPosition: (200, 200),
+    foodPosition:  foodPosition,
     running: Alive,
   };
-};
-
-
-let drawFood = (~pos, ~color, ~env) => {
-  Draw.fill(color, env);
-  Draw.ellipse(~center=pos, ~radx=foodSize, ~rady=foodSize, env);
 };
 
 let snakeDirection = (~direction, ~env) => {
@@ -158,13 +166,16 @@ let snakeDirection = (~direction, ~env) => {
 
 let moveSnakeGrid = (~gridPos, ~direction) => {
   let (x, y) = gridPos;
-  switch (direction) {
+  let (finalX, finalY) = switch (direction) {
     | Left => (x - 1, y)
     | Right => (x + 1, y)
     | Up => (x, y - 1)
     | Down => (x, y + 1)
     | None => (x, y)
   };
+  let x = clamp(0, gridWidth - 1, finalX);
+  let y = clamp(0, gridLength - 1, finalY);
+  (x, y);
 };
 
 let directionMoved = (~gridPos, ~gridPos2) => {
@@ -180,6 +191,21 @@ let directionMoved = (~gridPos, ~gridPos2) => {
   }
 }
 
+let drawFood = (~pos, ~color, ~env) => {
+  Draw.fill(color, env);
+  Draw.ellipse(~center=pos, ~radx=foodSize, ~rady=foodSize, env);
+};
+
+let drawBoundary = (~env) => {
+  let width = Env.width(env);
+  let height = Env.height(env);
+  let blockSize = bodySize;
+  Draw.fill(Constants.red, env);
+  Draw.rect(~pos=(0, 0), ~width=width, ~height=blockSize, env);
+  Draw.rect(~pos=(0,0), ~width=blockSize, ~height=height, env);
+  Draw.rect(~pos=(0, height - blockSize), ~width=width, ~height=blockSize,env);
+  Draw.rect(~pos=(width - blockSize,0), ~width=blockSize, ~height=height,env);
+}
 
 let drawSnake = (~pos,~grid, ~color, ~env) => {
   let offset = bodySize / 2;
@@ -189,8 +215,8 @@ let drawSnake = (~pos,~grid, ~color, ~env) => {
     ~grid=grid,
     ~x=x, 
     ~y=y,
-    ~offX=offset,
-    ~offY=offset
+    ~offX=0,
+    ~offY=0
     );
   Draw.fill(color, env);
   Draw.rect(~pos=(realX, realY), ~width=bodySize, ~height=bodySize, env);
@@ -209,13 +235,6 @@ let normalize = ((x, y)) => {
   (normX, normY);
 };
 let drawCenteredSysText = drawCenteredText(~color=textColor);
-
-let createSnakeBody = (~oldPos, ~newPos, ~bodySize,) => {
-  let (oldX, oldY) = oldPos;
-  let (newX, newY) = newPos;
-  let (x, y) = normalize((oldX - newX, oldY - newY));
-  (x * bodySize + newX, y * bodySize + newY);
-};
 
 let intersectRectCircleI = (~rectPos, ~rectW, ~rectH, ~circlePos, ~circleRad) => {
   let (rectX, rectY) = rectPos;
@@ -244,9 +263,8 @@ let draw =
     env
   ) => {
     let currentDirection = snakeDirection(~direction=direction, ~env=env);
-    if(Env.frameCount(env) mod 10 == 1) {
-      let width = Env.width(env);
-      let height = Env.height(env);
+    
+    if(Env.frameCount(env) mod frameLock == 1) {
       let (gridWidth, gridLength) = gridSize;
       /* Utils.random(~min=0, ~max=width), Utils.random(~min=0, ~max=height) */
       let (snakeGridX,snakeGridY) = snake |> Array.of_list |> Array.get(_, 0);
@@ -259,6 +277,7 @@ let draw =
           ~circleRad=foodSize,
         );
       Draw.background(Utils.color(~r=125, ~g=125, ~b=125, ~a=255), env);
+      drawBoundary(~env);
       drawFood(~pos=foodPosition, ~color=foodColor, ~env);
       List.iter(drawSnake(~pos=_, ~grid, ~color=headColor, ~env), snake);
 
@@ -271,14 +290,14 @@ let draw =
       drawCenteredSysText(~text="Level: " ++ string_of_int(level), ~y=40, ~env);
 
       let (headX, headY) = getListElement(0, snake);
+      let (realHeadX, realHeadY) = getGridPosition(~x=headX, ~y=headY, ~grid=grid);
       let boundaryHit =
-        switch (hitBoundary(headX, headY, env)) {
+        switch (hitBoundary(realHeadX, realHeadY, env)) {
         | HitSides => true
         | HitCeiling => true
         | HitNoBoundary => false
         };
 
-      
       /* print_endline(boundaryHit |> string_of_bool) */
       switch (running) {
       | Alive => {
@@ -288,8 +307,8 @@ let draw =
           foodPosition:
             isCollideWithFood ?
               getGridPosition(
-                ~x=Utils.random(~min=0, ~max=gridWidth),
-                ~y=Utils.random(~min=0, ~max=gridLength),
+                ~x=Utils.random(~min=1, ~max=gridWidth - 1),
+                ~y=Utils.random(~min=1, ~max=gridLength - 1),
                 ~grid,
               )
               |> offsetPosition(
@@ -334,32 +353,29 @@ let draw =
       | Restart => {
           ...state,
           score: 0,
+          foodPosition: randomGridPosition(
+            ~minX=1,
+            ~minY=1,
+            ~maxY=gridLength - 1,
+            ~maxX=gridWidth - 1,
+          ),
           snake: [
-            (
-              Utils.random(~min=0, ~max=width - foodSize * 2),
-              Utils.random(~min=0, ~max=height - foodSize * 2),
-            ),
+            randomGridPosition(
+              ~minX=1,
+              ~minY=1,
+              ~maxY=gridLength - 1,
+              ~maxX=gridWidth - 1
+            )
           ],
+          direction: None,
           running: boundaryHit ? Alive : Restart,
         }
       };
     } else {
-      let width = Env.width(env);
-      let height = Env.height(env);
-      let (gridWidth, gridLength) = gridSize;
-      /* Utils.random(~min=0, ~max=width), Utils.random(~min=0, ~max=height) */
-      let isCollideWithFood =
-        intersectRectCircleI(
-          ~rectPos=snake |> Array.of_list |> Array.get(_, 0),
-          ~rectW=bodySize,
-          ~rectH=bodySize,
-          ~circlePos=foodPosition,
-          ~circleRad=foodSize,
-        );
       Draw.background(Utils.color(~r=125, ~g=125, ~b=125, ~a=255), env);
+      drawBoundary(~env);
       drawFood(~pos=foodPosition, ~color=foodColor, ~env);
       List.iter(drawSnake(~pos=_, ~grid, ~color=headColor, ~env), snake);
-      /* drawSnake(~pos=headPosition, ~color=headColor, ~env); */
 
       drawCenteredSysText(~text="Score: " ++ string_of_int(score), ~y=120, ~env);
       drawCenteredSysText(
