@@ -11,9 +11,11 @@ let gridSize = (100, 100);
 let frameLock = 2;
 let (gridLength, gridWidth) = gridSize;
 let bodySize = width / gridLength;
-let foodSize = (width / gridWidth ) / 2
+let foodSize = (width / gridWidth ) / 2;
+let obstacleAmount = float_of_int(gridLength * gridWidth) *. 0.01
+|> floor |> int_of_float; 
 let headColor = Utils.color(~r=255, ~g=255, ~b=255, ~a=255);
-let foodColor = Utils.color(~r=255, ~g=255, ~b=0, ~a=255);
+let foodColor = Constants.red;
 let obstacleColor = Utils.color(~r=0, ~g=255, ~b=0, ~a=255);
 let textColor = Utils.color(~r=255, ~g=255, ~b=255, ~a=255);
 
@@ -47,6 +49,7 @@ type stateT = {
   snake: list((int, int)),
   snakePrevious: list((int, int)),
   foodPosition: (int, int),
+  obstacles: list((int,int)),
   running: runningT
 };
 
@@ -138,6 +141,17 @@ let setup = env => {
     ~maxX=gridWidth - 1,
     ~grid=grid
     );
+
+    let obstaclePositions = Array.make(obstacleAmount, {||}) 
+    |> Array.map((_) => {
+      randomGridPositionReal(
+        ~minX=1,
+        ~minY=1,
+        ~maxY=gridLength - 1,
+        ~maxX=gridWidth - 1,
+        ~grid,
+      );
+    }) |> Array.to_list;
   Env.size(~width, ~height, env);
   {
     score: 0,
@@ -147,6 +161,7 @@ let setup = env => {
     snake: [position],
     snakePrevious: [position],
     foodPosition:  foodPosition,
+    obstacles: obstaclePositions,
     running: Alive,
   };
 };
@@ -205,11 +220,16 @@ let drawFood = (~pos, ~color, ~env) => {
   Draw.ellipse(~center=pos, ~radx=foodSize, ~rady=foodSize, env);
 };
 
+let drawObstacle = (~pos, ~color, ~env) => {
+  Draw.fill(color, env);
+  Draw.rect(~pos=pos, ~width=bodySize, ~height=bodySize, env);
+}
+
 let drawBoundary = (~env) => {
   let width = Env.width(env);
   let height = Env.height(env);
   let blockSize = bodySize;
-  Draw.fill(Constants.red, env);
+  Draw.fill(Constants.black, env);
   Draw.rect(~pos=(0, 0), ~width=width, ~height=blockSize, env);
   Draw.rect(~pos=(0,0), ~width=blockSize, ~height=height, env);
   Draw.rect(~pos=(0, height - blockSize), ~width=width, ~height=blockSize,env);
@@ -219,7 +239,7 @@ let drawBoundary = (~env) => {
 let drawSnake = (~pos,~grid, ~color, ~env) => {
   let offset = bodySize / 2;
   let (x, y) = pos;
-  printPosition(pos);
+  print_string("Snake position: ") printPosition(pos);
   let (realX, realY) = getGridPositionOffset(
     ~grid=grid,
     ~x=x, 
@@ -279,7 +299,8 @@ let draw =
       level, 
       snake,
       snakePrevious,
-      foodPosition, 
+      foodPosition,
+      obstacles, 
       running
     } as state, 
     env
@@ -300,6 +321,7 @@ let draw =
         );
       Draw.background(Utils.color(~r=125, ~g=125, ~b=125, ~a=255), env);
       drawBoundary(~env);
+      List.iter(drawObstacle(~pos=_, ~color=obstacleColor, ~env=env), obstacles);
       drawFood(~pos=foodPosition, ~color=foodColor, ~env);
       List.iter(drawSnake(~pos=_, ~grid, ~color=headColor, ~env), snake);
 
@@ -331,6 +353,31 @@ let draw =
                headX == headX2 && headY == headY2;
           });
         }
+
+        let obstacleHit  = List.exists(el => {
+          let (obstacleX, obstacleY) = el;
+          intersectRectRectI(
+            ~rectPos=(realHeadX, realHeadY),
+            ~rectW=bodySize,
+            ~rectH=bodySize,
+            ~rect2Pos=(obstacleX, obstacleY),
+            ~rect2W=bodySize,
+            ~rect2H=bodySize
+            );
+        }, obstacles);
+
+        let randomObstaclePositions =
+          Array.make(obstacleAmount, {||})
+          |> Array.map(_ =>
+               randomGridPositionReal(
+                 ~minX=1,
+                 ~minY=1,
+                 ~maxY=gridLength - 1,
+                 ~maxX=gridWidth - 1,
+                 ~grid,
+               )
+             )
+          |> Array.to_list;
         /* print_endline(printRunning(running));
         print_endline(boundaryHit |> string_of_bool);
         print_endline(selfHit |> string_of_bool); */
@@ -375,7 +422,7 @@ let draw =
                 }
               }, snake),
           snakePrevious: snake,
-          running: boundaryHit || selfHit ? Dead : Alive,
+          running: boundaryHit || selfHit || obstacleHit ? Dead : Alive,
         }
       | Dead => {
           ...state,
@@ -400,6 +447,7 @@ let draw =
               ~maxX=gridWidth - 1
             )
           ],
+          obstacles: randomObstaclePositions,
           direction: None,
           running: Alive
         }
@@ -407,6 +455,7 @@ let draw =
     } else {
       Draw.background(Utils.color(~r=125, ~g=125, ~b=125, ~a=255), env);
       drawBoundary(~env);
+      List.iter(drawObstacle(~pos=_, ~color=obstacleColor, ~env), obstacles);
       drawFood(~pos=foodPosition, ~color=foodColor, ~env);
       List.iter(drawSnake(~pos=_, ~grid, ~color=headColor, ~env), snake);
 
