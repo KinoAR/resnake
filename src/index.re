@@ -29,6 +29,7 @@ type runningT =
 type hitBoundaryT = 
   | HitCeiling 
   | HitSides
+  | HitSelf
   | HitNoBoundary;
 
 type directionT = 
@@ -69,6 +70,7 @@ let hitBoundary = (x, y, env) => {
   };
 };
 
+
 let printPosition = (position) => {
   let (x , y) = position;
   print_endline("(" ++ string_of_int(x) ++ "," ++ string_of_int(y) ++ ")");
@@ -100,12 +102,10 @@ let randomGridPosition = (~minX, ~minY, ~maxX, ~maxY) => {
   (x, y);
 }
 
-let randomGridPositionReal = (~gridSize, ~grid, ~offX, ~offY) => {
-  let (gridWidth, gridLength) = gridSize;
-  let x = Utils.random(~min=0, ~max=gridWidth);
-  let y = Utils.random(~min=0, ~max=gridLength);
-  getGridPosition(~x=x, ~y=y, ~grid=grid) 
-  |> offsetPosition(~offX, ~offY, ~position=_); 
+let randomGridPositionReal = (~minX, ~minY, ~maxX, ~maxY, ~grid) => {
+  let (x, y) = randomGridPosition(~minX, ~minY, ~maxX, ~maxY);
+  getGridPosition(~x=x, ~y=y, ~grid=grid);
+  /* |> offsetPosition(~offX, ~offY, ~position=_);  */
 };
 
 let createGrid = (~gridSize, ~width, ~height) => {
@@ -131,11 +131,12 @@ let setup = env => {
       ~maxX=gridWidth - 1
     );
 
-  let foodPosition = randomGridPosition(
+  let foodPosition = randomGridPositionReal(
     ~minX=1,
     ~minY=1,
     ~maxY=gridLength - 1,
-    ~maxX=gridWidth - 1
+    ~maxX=gridWidth - 1,
+    ~grid=grid
     );
   Env.size(~width, ~height, env);
   {
@@ -190,6 +191,14 @@ let directionMoved = (~gridPos, ~gridPos2) => {
     | (_, _) => None
   }
 }
+
+let printRunning = (running)  => {
+  switch(running) {
+    | Alive => "Alive"
+    | Dead => "Dead"
+    | Restart => "Restart"
+  };
+};
 
 let drawFood = (~pos, ~color, ~env) => {
   Draw.fill(color, env);
@@ -246,7 +255,20 @@ let intersectRectCircleI = (~rectPos, ~rectW, ~rectH, ~circlePos, ~circleRad) =>
     ~circlePos=(circleX |> float_of_int, circleY |> float_of_int),
     ~circleRad=circleRad |> float_of_int
     );
-}
+};
+
+let intersectRectRectI = (~rectPos, ~rectW, ~rectH, ~rect2Pos, ~rect2W, ~rect2H) => {
+  let (rectX, rectY) = rectPos;
+  let (rectX2, rectY2) = rect2Pos;
+  Utils.intersectRectRect(
+    ~rect1Pos=(rectX |> float_of_int, rectY |> float_of_int),
+    ~rect1W=rectW |> float_of_int,
+    ~rect1H=rectH |> float_of_int,
+    ~rect2Pos=(rectX2 |> float_of_int, rectY2 |> float_of_int),
+    ~rect2W=rect2W |> float_of_int,
+    ~rect2H= rect2H |> float_of_int
+  );
+};
 
 let draw = 
   (
@@ -295,10 +317,23 @@ let draw =
         switch (hitBoundary(realHeadX, realHeadY, env)) {
         | HitSides => true
         | HitCeiling => true
+        | HitSelf => true
         | HitNoBoundary => false
         };
-
-      /* print_endline(boundaryHit |> string_of_bool) */
+        let selfHit = switch(List.length(snake)) {
+          | 1 => false
+          | _ => snake
+          |> Array.of_list
+          |> Array.sub(_, 1, List.length(snake) - 1)
+          |> Array.to_list
+          |> List.exists(el => {
+               let (headX2, headY2) = el;
+               headX == headX2 && headY == headY2;
+          });
+        }
+        /* print_endline(printRunning(running));
+        print_endline(boundaryHit |> string_of_bool);
+        print_endline(selfHit |> string_of_bool); */
       switch (running) {
       | Alive => {
           ...state,
@@ -306,16 +341,13 @@ let draw =
           direction: currentDirection,
           foodPosition:
             isCollideWithFood ?
-              getGridPosition(
-                ~x=Utils.random(~min=1, ~max=gridWidth - 1),
-                ~y=Utils.random(~min=1, ~max=gridLength - 1),
+              randomGridPositionReal(
+                ~minX=1,
+                ~minY=1,
+                ~maxY=gridLength - 1,
+                ~maxX=gridWidth - 1,
                 ~grid,
-              )
-              |> offsetPosition(
-                   ~offX=foodSize / 2 + 12,
-                   ~offY=foodSize / 2 + 12,
-                   ~position=_,
-                 ) :
+              ) :
               foodPosition,
           snake:
             isCollideWithFood ?
@@ -343,21 +375,22 @@ let draw =
                 }
               }, snake),
           snakePrevious: snake,
-          running: boundaryHit ? Dead : Alive,
+          running: boundaryHit || selfHit ? Dead : Alive,
         }
       | Dead => {
           ...state,
           highScore: score > highScore ? score : highScore,
-          running: boundaryHit ? Restart : Dead,
+          running: Restart,
         }
       | Restart => {
           ...state,
           score: 0,
-          foodPosition: randomGridPosition(
+          foodPosition: randomGridPositionReal(
             ~minX=1,
             ~minY=1,
             ~maxY=gridLength - 1,
             ~maxX=gridWidth - 1,
+            ~grid=grid,
           ),
           snake: [
             randomGridPosition(
@@ -368,7 +401,7 @@ let draw =
             )
           ],
           direction: None,
-          running: boundaryHit ? Alive : Restart,
+          running: Alive
         }
       };
     } else {
