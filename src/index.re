@@ -134,22 +134,20 @@ let setup = env => {
       ~maxX=gridWidth - 1
     );
 
-  let foodPosition = randomGridPositionReal(
+  let foodPosition = randomGridPosition(
     ~minX=1,
     ~minY=1,
     ~maxY=gridLength - 1,
     ~maxX=gridWidth - 1,
-    ~grid=grid
     );
 
     let obstaclePositions = Array.make(obstacleAmount, {||}) 
     |> Array.map((_) => {
-      randomGridPositionReal(
+      randomGridPosition(
         ~minX=1,
         ~minY=1,
         ~maxY=gridLength - 1,
         ~maxX=gridWidth - 1,
-        ~grid,
       );
     }) |> Array.to_list;
   Env.size(~width, ~height, env);
@@ -215,14 +213,29 @@ let printRunning = (running)  => {
   };
 };
 
-let drawFood = (~pos, ~color, ~env) => {
+let drawFood = (~pos, ~grid, ~color, ~env) => {
+  let (x, y) = pos;
+  let (realX, realY) = getGridPositionOffset(
+    ~grid=grid,
+    ~x=x,
+    ~y=y,
+    ~offX=(foodSize / 2),
+    ~offY= (foodSize / 2)
+  )
   Draw.fill(color, env);
-  Draw.ellipse(~center=pos, ~radx=foodSize, ~rady=foodSize, env);
+  Draw.ellipse(~center=(realX, realY), ~radx=foodSize, ~rady=foodSize, env);
 };
 
-let drawObstacle = (~pos, ~color, ~env) => {
+let drawObstacle = (~pos, ~grid, ~color, ~env) => {
+  let (x, y) = pos;
   Draw.fill(color, env);
-  Draw.rect(~pos=pos, ~width=bodySize, ~height=bodySize, env);
+  Draw.rect(~pos=getGridPositionOffset(
+    ~x=x,
+    ~y=y,
+    ~offX=0,
+    ~offY=0,
+    ~grid=grid
+  ), ~width=bodySize, ~height=bodySize, env);
 }
 
 let drawBoundary = (~env) => {
@@ -239,7 +252,7 @@ let drawBoundary = (~env) => {
 let drawSnake = (~pos,~grid, ~color, ~env) => {
   let offset = bodySize / 2;
   let (x, y) = pos;
-  print_string("Snake position: ") printPosition(pos);
+  /* print_string("Snake position: ") printPosition(pos); */
   let (realX, realY) = getGridPositionOffset(
     ~grid=grid,
     ~x=x, 
@@ -311,18 +324,12 @@ let draw =
       let (gridWidth, gridLength) = gridSize;
       /* Utils.random(~min=0, ~max=width), Utils.random(~min=0, ~max=height) */
       let (snakeGridX,snakeGridY) = snake |> Array.of_list |> Array.get(_, 0);
-      let isCollideWithFood =
-        intersectRectCircleI(
-          ~rectPos= getGridPosition(~x=snakeGridX,~y=snakeGridY,~grid=grid),
-          ~rectW=bodySize,
-          ~rectH=bodySize,
-          ~circlePos=foodPosition,
-          ~circleRad=foodSize,
-        );
+      let (foodX, foodY) = foodPosition;
+
       Draw.background(Utils.color(~r=125, ~g=125, ~b=125, ~a=255), env);
       drawBoundary(~env);
-      List.iter(drawObstacle(~pos=_, ~color=obstacleColor, ~env=env), obstacles);
-      drawFood(~pos=foodPosition, ~color=foodColor, ~env);
+      List.iter(drawObstacle(~pos=_, ~grid=grid, ~color=obstacleColor, ~env=env), obstacles);
+      drawFood(~pos=foodPosition, ~grid=grid, ~color=foodColor, ~env);
       List.iter(drawSnake(~pos=_, ~grid, ~color=headColor, ~env), snake);
 
       drawCenteredSysText(~text="Score: " ++ string_of_int(score), ~y=120, ~env);
@@ -335,6 +342,8 @@ let draw =
 
       let (headX, headY) = getListElement(0, snake);
       let (realHeadX, realHeadY) = getGridPosition(~x=headX, ~y=headY, ~grid=grid);
+      
+      let isCollideWithFood = headX == foodX && foodY == headY;
       let boundaryHit =
         switch (hitBoundary(realHeadX, realHeadY, env)) {
         | HitSides => true
@@ -356,25 +365,17 @@ let draw =
 
         let obstacleHit  = List.exists(el => {
           let (obstacleX, obstacleY) = el;
-          intersectRectRectI(
-            ~rectPos=(realHeadX, realHeadY),
-            ~rectW=bodySize,
-            ~rectH=bodySize,
-            ~rect2Pos=(obstacleX, obstacleY),
-            ~rect2W=bodySize,
-            ~rect2H=bodySize
-            );
+          headX == obstacleX && headY == obstacleY
         }, obstacles);
 
         let randomObstaclePositions =
           Array.make(obstacleAmount, {||})
           |> Array.map(_ =>
-               randomGridPositionReal(
+               randomGridPosition(
                  ~minX=1,
                  ~minY=1,
                  ~maxY=gridLength - 1,
                  ~maxX=gridWidth - 1,
-                 ~grid,
                )
              )
           |> Array.to_list;
@@ -388,12 +389,11 @@ let draw =
           direction: currentDirection,
           foodPosition:
             isCollideWithFood ?
-              randomGridPositionReal(
+              randomGridPosition(
                 ~minX=1,
                 ~minY=1,
                 ~maxY=gridLength - 1,
                 ~maxX=gridWidth - 1,
-                ~grid,
               ) :
               foodPosition,
           snake:
@@ -432,12 +432,11 @@ let draw =
       | Restart => {
           ...state,
           score: 0,
-          foodPosition: randomGridPositionReal(
+          foodPosition: randomGridPosition(
             ~minX=1,
             ~minY=1,
             ~maxY=gridLength - 1,
             ~maxX=gridWidth - 1,
-            ~grid=grid,
           ),
           snake: [
             randomGridPosition(
@@ -455,8 +454,8 @@ let draw =
     } else {
       Draw.background(Utils.color(~r=125, ~g=125, ~b=125, ~a=255), env);
       drawBoundary(~env);
-      List.iter(drawObstacle(~pos=_, ~color=obstacleColor, ~env), obstacles);
-      drawFood(~pos=foodPosition, ~color=foodColor, ~env);
+      List.iter(drawObstacle(~pos=_, ~grid=grid, ~color=obstacleColor, ~env), obstacles);
+      drawFood(~pos=foodPosition, ~grid=grid, ~color=foodColor, ~env);
       List.iter(drawSnake(~pos=_, ~grid, ~color=headColor, ~env), snake);
 
       drawCenteredSysText(~text="Score: " ++ string_of_int(score), ~y=120, ~env);
