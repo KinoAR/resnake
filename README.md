@@ -37,3 +37,11 @@ To build to native run `npm run build:native` and run `npm run start:native`
 
 The build system used is [bsb-native](https://github.com/bsansouci/bucklescript).
 
+## How To Play
+
+* Move the snake with the arrow keys
+* As you collect food, the snake gets longer
+* Game Over if
+  * you eat your own body
+  * run into an obstacle
+  * hit the boundaries

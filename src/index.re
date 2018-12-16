@@ -11,7 +11,6 @@ let gridSize = (100, 100);
 let frameLock = 2;
 let (gridLength, gridWidth) = gridSize;
 let bodySize = width / gridLength;
-let foodSize = (width / gridWidth ) / 2;
 let obstacleAmount = float_of_int(gridLength * gridWidth) *. 0.01
 |> floor |> int_of_float; 
 let headColor = Utils.color(~r=255, ~g=255, ~b=255, ~a=255);
@@ -111,6 +110,18 @@ let randomGridPositionReal = (~minX, ~minY, ~maxX, ~maxY, ~grid) => {
   /* |> offsetPosition(~offX, ~offY, ~position=_);  */
 };
 
+let rec randomFreeGridPosition = (~minX, ~minY, ~maxX, ~maxY, ~positionList) => {
+  let randomPosition = randomGridPosition(~minX, ~minY, ~maxX, ~maxY);
+  let match = List.exists((position) => {
+    randomPosition == position;
+  }, positionList)
+  if(match == false) {
+    randomPosition;
+  } else {
+    randomFreeGridPosition(~minX, ~minY, ~maxX, ~maxY, ~positionList)
+  }
+};
+
 let createGrid = (~gridSize, ~width, ~height) => {
   let (gridWidth, gridLength) = gridSize;
   let length = height / gridLength;
@@ -134,13 +145,6 @@ let setup = env => {
       ~maxX=gridWidth - 1
     );
 
-  let foodPosition = randomGridPosition(
-    ~minX=1,
-    ~minY=1,
-    ~maxY=gridLength - 1,
-    ~maxX=gridWidth - 1,
-    );
-
     let obstaclePositions = Array.make(obstacleAmount, {||}) 
     |> Array.map((_) => {
       randomGridPosition(
@@ -150,6 +154,15 @@ let setup = env => {
         ~maxX=gridWidth - 1,
       );
     }) |> Array.to_list;
+
+    let foodPosition =
+      randomFreeGridPosition(
+        ~minX=1,
+        ~minY=1,
+        ~maxY=gridLength - 1,
+        ~maxX=gridWidth - 1,
+        ~positionList=obstaclePositions,
+      );
   Env.size(~width, ~height, env);
   {
     score: 0,
@@ -215,15 +228,16 @@ let printRunning = (running)  => {
 
 let drawFood = (~pos, ~grid, ~color, ~env) => {
   let (x, y) = pos;
+  let halfFoodSize = (bodySize / 2);
   let (realX, realY) = getGridPositionOffset(
     ~grid=grid,
     ~x=x,
     ~y=y,
-    ~offX=(foodSize / 2),
-    ~offY= (foodSize / 2)
+    ~offX= halfFoodSize,
+    ~offY= halfFoodSize
   )
   Draw.fill(color, env);
-  Draw.ellipse(~center=(realX, realY), ~radx=foodSize, ~rady=foodSize, env);
+  Draw.ellipse(~center=(realX, realY), ~radx=halfFoodSize, ~rady=halfFoodSize, env);
 };
 
 let drawObstacle = (~pos, ~grid, ~color, ~env) => {
@@ -250,7 +264,6 @@ let drawBoundary = (~env) => {
 }
 
 let drawSnake = (~pos,~grid, ~color, ~env) => {
-  let offset = bodySize / 2;
   let (x, y) = pos;
   /* print_string("Snake position: ") printPosition(pos); */
   let (realX, realY) = getGridPositionOffset(
@@ -319,10 +332,8 @@ let draw =
     env
   ) => {
     let currentDirection = snakeDirection(~direction=direction, ~env=env);
-    
     if(Env.frameCount(env) mod frameLock == 1) {
       let (gridWidth, gridLength) = gridSize;
-      /* Utils.random(~min=0, ~max=width), Utils.random(~min=0, ~max=height) */
       let (snakeGridX,snakeGridY) = snake |> Array.of_list |> Array.get(_, 0);
       let (foodX, foodY) = foodPosition;
 
@@ -389,11 +400,12 @@ let draw =
           direction: currentDirection,
           foodPosition:
             isCollideWithFood ?
-              randomGridPosition(
+              randomFreeGridPosition(
                 ~minX=1,
                 ~minY=1,
                 ~maxY=gridLength - 1,
                 ~maxX=gridWidth - 1,
+                ~positionList=obstacles,
               ) :
               foodPosition,
           snake:
