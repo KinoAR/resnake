@@ -343,13 +343,13 @@ let draw =
       drawFood(~pos=foodPosition, ~grid=grid, ~color=foodColor, ~env);
       List.iter(drawSnake(~pos=_, ~grid, ~color=headColor, ~env), snake);
 
-      drawCenteredSysText(~text="Score: " ++ string_of_int(score), ~y=120, ~env);
+      drawCenteredSysText(~text="Score: " ++ string_of_int(score), ~y=80, ~env);
       drawCenteredSysText(
         ~text="High Score: " ++ string_of_int(highScore),
-        ~y=80,
+        ~y=40,
         ~env,
       );
-      drawCenteredSysText(~text="Level: " ++ string_of_int(level), ~y=40, ~env);
+      /* drawCenteredSysText(~text="Level: " ++ string_of_int(level), ~y=40, ~env); */
 
       let (headX, headY) = getListElement(0, snake);
       let (realHeadX, realHeadY) = getGridPosition(~x=headX, ~y=headY, ~grid=grid);
@@ -470,13 +470,13 @@ let draw =
       drawFood(~pos=foodPosition, ~grid=grid, ~color=foodColor, ~env);
       List.iter(drawSnake(~pos=_, ~grid, ~color=headColor, ~env), snake);
 
-      drawCenteredSysText(~text="Score: " ++ string_of_int(score), ~y=120, ~env);
+      drawCenteredSysText(~text="Score: " ++ string_of_int(score), ~y=80, ~env);
       drawCenteredSysText(
         ~text="High Score: " ++ string_of_int(highScore),
-        ~y=80,
+        ~y=40,
         ~env,
       );
-      drawCenteredSysText(~text="Level: " ++ string_of_int(level), ~y=40, ~env);
+      /* drawCenteredSysText(~text="Level: " ++ string_of_int(level), ~y=40, ~env); */
       {...state,
         direction: currentDirection
       };
