@@ -5,8 +5,8 @@
 open Reprocessing;
 
 
-let width = 1000;
-let height = 1000;
+let width = 700;
+let height = 700;
 let gridSize = (100, 100);
 let frameLock = 2;
 let (gridLength, gridWidth) = gridSize;
@@ -134,7 +134,7 @@ let createGrid = (~gridSize, ~width, ~height) => {
 };
 
 let grid = createGrid(~gridSize=gridSize,~width=width, ~height=height);
-printGrid(grid);
+/* printGrid(grid); */
 
 
 let setup = env => {
